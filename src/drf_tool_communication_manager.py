@@ -18,7 +18,7 @@ class Configuration_Values(Enum):
     WAKEUP_TIME = 6
 
 
-class dorji_rf_module():
+class DRFToolCommunicationManager():
     def __init__(self):
         self._serial_port = None
         self._freq = 0
@@ -36,10 +36,11 @@ class dorji_rf_module():
             self._serial_port = serial.Serial(port=serialport, baudrate=baudrate, bytesize=serial.EIGHTBITS,
                                               parity=parity, stopbits=serial.STOPBITS_ONE, timeout=0.1)
             self._connected = True
-
+            return True
         except Exception as e:
             self._connected = False
             print(e)
+            return False
 
     def disconnect(self):
         try:
@@ -51,17 +52,22 @@ class dorji_rf_module():
             print(e)
 
     def _write_configurations(self):
-        #data = b'\x24\x24\x24' + \
-        data = b'\xFF\x56\xAE\x35\xA9\x55\x90' + \
-            self._freq + self._rf_trx_rate+self._rf_power + \
-            self._baud_rate+self._parity+self._wakeup_time
-        
-        print(binascii.hexlify(data))
-        self._serial_port.write(data)
-        time.sleep(0.2)
-        response = self.read_data_from_serial()
-        if response:
-            self._parse_configurations(response)
+        try:
+            if self._connected:
+                #data = b'\x24\x24\x24' + \
+                data = b'\xFF\x56\xAE\x35\xA9\x55\x90' + \
+                    self._freq + self._rf_trx_rate+self._rf_power + \
+                    self._baud_rate+self._parity+self._wakeup_time
+                
+                print(binascii.hexlify(data))
+                self._serial_port.write(data)
+                time.sleep(0.2)
+                response = self.read_data_from_serial()
+                if response:
+                    self._parse_configurations(response)
+        except:
+            self.disconnect()
+            self._connected = False
 
     def read_configurations(self):
         if self._connected:

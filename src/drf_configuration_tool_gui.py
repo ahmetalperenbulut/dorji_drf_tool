@@ -4,13 +4,13 @@
 
 import tkinter
 import tkinter.ttk
-import dorji_configuration_tool
+from .drf_tool_communication_manager import DRFToolCommunicationManager
 from serial.tools import list_ports
 import serial
 import sys
+import time
 
-
-class DorjiConfigurationGUI:
+class DRFConfigurationToolGUI:
     def __init__(self):
         self.tk = tkinter.Tk()
         self.tk.title("Dorji RF Module Configuration Tool")
@@ -19,7 +19,7 @@ class DorjiConfigurationGUI:
         self.tk.grid_columnconfigure(0, weight=1)
         self.tk.grid_rowconfigure(0, weight=1)
         self.tk.configure(background="#c0c0c0")
-        self.communication = dorji_configuration_tool.dorji_rf_module()
+        self.communication = DRFToolCommunicationManager()
         # Main Frame
         content = tkinter.Frame(self.tk, height=500, width=600)
         content.grid(row=0, column=0, sticky=tkinter.N)
@@ -143,13 +143,14 @@ class DorjiConfigurationGUI:
             20, 0), sticky=tkinter.W, pady=(10, 0))
         
         # Buttons
-        write_button = tkinter.Button(
-            pcserialframe, text="Write", command=self.write_button_clicked)
-        write_button.grid(row=0, column=3, sticky=tkinter.W,
-                          padx=(70, 40), pady=(10, 0))
         read_button = tkinter.Button(
             pcserialframe, text="Read", command=self.read_button_clicked)
-        read_button.grid(row=0, column=4, sticky=tkinter.W, pady=(10, 0))
+        read_button.grid(row=0, column=3, sticky=tkinter.W, padx=(70,40), pady=(10, 0))
+
+        write_button = tkinter.Button(
+            pcserialframe, text="Write", command=self.write_button_clicked)
+        write_button.grid(row=0, column=4, sticky=tkinter.W, pady=(10, 0))
+        
 
         # Outputs frame
         self.outputs_lbl = tkinter.Label(outputs_frame,  bg="#c0c0c0")
@@ -157,33 +158,50 @@ class DorjiConfigurationGUI:
         self.tk.mainloop()
 
     def pc_series_cb(self, eventObject):
-        
         self.pcseries_combo['values'] = self.read_comports()
         if len(self.pcseries_combo['values']) > 0:
             self.pcseries_combo.current(0)  # set the selected item
 
+    def connect(self):
+        if self.pcseries_combo.current() < 0:
+            self.outputs_lbl["text"] = "Serial device not found"
+            return False
+        if (self.communication._connected):
+            self.communication.disconnect()
+            time.sleep(0.2)
+
+        if self.communication.connect(self.pcseries_combo.get()):
+            self.outputs_lbl["text"] = "Connection Successful"
+            return True
+        else:
+            self.outputs_lbl["text"] = "Connection Error"
+            return False
 
     def read_button_clicked(self):
-        if self.pcseries_combo.current() < 0:
+        if not self.connect():
             return
-        
 
-        self.communication.connect(self.pcseries_combo.get(), self.communication._mapping_readable_form(
-            self.series_rate_combo.current(), dorji_configuration_tool.Configuration_Values.BAUD_RATE), self.mapping_parity(self.series_parity_combo.current()))
         if self.communication.read_configurations():
             self.freq_txt.delete(0,tkinter.END)
             self.freq_txt.insert(0,self.communication._freq_readable/1000)
             self.power_combo.current(int.from_bytes(self.communication._rf_power,sys.byteorder))
             self.trx_rate_combo.current(int.from_bytes(self.communication._rf_trx_rate,sys.byteorder))
             self.wakeup_combo.current(int.from_bytes(self.communication._wakeup_time,sys.byteorder))
+            self.outputs_lbl["text"] = "Read operation was successful"
+        else:
+            self.outputs_lbl["text"] = "Unknown error occured"
         self.communication.disconnect()
 
     def write_button_clicked(self):
+        if not self.connect():
+            return
+
         if self.write_form_elements_to_communication():
-            self.communication.connect(self.pcseries_combo.get(), self.communication._mapping_readable_form(
-            self.series_rate_combo.current(), dorji_configuration_tool.Configuration_Values.BAUD_RATE), self.mapping_parity(self.series_parity_combo.current()))
             self.communication._write_configurations()
-            self.communication.disconnect()
+            self.outputs_lbl["text"] = "Write operation was successful"
+        else:
+            self.outputs_lbl["text"] = "Invalid Configurations"
+        self.communication.disconnect()
 
     def write_form_elements_to_communication(self):
         try:
@@ -197,7 +215,6 @@ class DorjiConfigurationGUI:
             self.communication._parity = self.series_parity_combo.current().to_bytes(1, 'big')
             self.communication._wakeup_time = self.wakeup_combo.current().to_bytes(1, 'big')
             
-
             return True
         except Exception as e:
             print(e)
@@ -220,4 +237,3 @@ class DorjiConfigurationGUI:
             return serial.PARITY_ODD
 
 
-a = DorjiConfigurationGUI()
